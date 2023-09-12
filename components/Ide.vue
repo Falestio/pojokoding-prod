@@ -54,71 +54,15 @@ import { Codemirror } from "vue-codemirror";
 // import { material } from '@uiw/codemirror-theme-material'
 import { javascript } from "@codemirror/lang-javascript";
 
+const props = defineProps({
+    latihan: Object
+})
+
 const extensions = [javascript()];
 
-const compileCode = ref(`
-let readline = require("readline")
+const testCases = ref(props.latihan.testCases);
 
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
-
-rl.on('line', function(line){
-    greet(line)
-})
-`);
-
-const startingCode = ref(`
-function greet(name){
-    console.log("Hallo", name)
-}
-`);
-
-const latihan = ref({
-    _createdAt: "2023-03-08T08:17:37Z",
-    _id: "cf97c4c1-4f3a-4669-950f-4646d853dd32",
-    _rev: "LKHcCiwWFCTdJG3aaSHMvl",
-    _type: "content",
-    _updatedAt: "2023-03-08T08:36:29Z",
-    contentType: "exercise",
-    course: {
-        _ref: "05a58cb4-d523-430f-bee9-37087b44c366",
-        _type: "reference",
-    },
-    lang: 63,
-    orderRank: "0|100014:",
-    prompt: 'Pada text editor sudah terbuat fungsi bernama beliBaju() yang menerima parameter harga dan uang\n\nbuatlah fungsional dari fungsi sebagai berikut\n\n1. Jika lebih besar tampilkan pesan `Uang kamu cukup`\n2. Jika uang lebih kecil dari harga tampilkan ``Uang kamu tidak cukup"',
-    slug: {
-        _type: "slug",
-        current: "latihan-git-push",
-    },
-    testCases: [
-        {
-            _key: "af6a7357afe2",
-            expectedOutput: "Hallo Tio",
-            input: "Tio",
-            testDesc: 'Tampilkan pesan "Hallo Tio"',
-            testTitle: "Tio",
-            status: "initial",
-        },
-        {
-            _key: "421738b01e5c",
-            expectedOutput: "Hallo yang lain",
-            input: "yang lain",
-            testDesc: 'Tampilkan pesan "Hallo yang lain"',
-            testTitle: "Hallo yang lain",
-            status: "initial",
-        },
-    ],
-    title: "Fungsi pengecek angka satu",
-    startingCode: startingCode.value,
-    compileCode: compileCode.value,
-});
-
-const testCases = ref(latihan.value.testCases);
-
-const code = ref(latihan.value.startingCode);
+const code = ref(props.latihan.startingCode);
 
 const stderr = ref("");
 
@@ -127,30 +71,25 @@ const stdout = ref("");
 async function execCode(userCode, input) {
     console.log("(EXEC CODE FUNCTION)");
 
-    const options = {
-        method: "POST",
-        url: "https://judge0-ce.p.rapidapi.com/submissions",
-        params: {
-            base64_encoded: "true",
-            wait: "true"
-        },
+    const config = {
         headers: {
             "content-type": "application/json",
             "Content-Type": "application/json",
-            "X-RapidAPI-Key": "c1cd14cd24msh8e81a60cb8cea23p14ed50jsnc69db5452635",
+            "X-RapidAPI-Key": "148bd21388msh371e4376375abbep1af45djsn1627d694daa9",
             "X-RapidAPI-Host": "judge0-ce.p.rapidapi.com",
         },
-        data: {
-            source_code: base64.encode(userCode),
-            language_id: latihan.value.lang, // replace with the ID for the language you want to use
-            stdin: base64.encode(input),
-        },
+    };
+
+    const data = {
+        source_code: base64.encode(userCode),
+        language_id: props.latihan.lang, // replace with the ID for the language you want to use
+        stdin: base64.encode(input),
     };
 
     console.log("Request Payload:", data);
 
     try {
-        const response = await axios.request(options)
+        const response = await axios.post("https://judge0-ce.p.rapidapi.com/submissions/?base64_encoded=true&wait=true", data, config);
 
         if (response.status !== 201) {
             throw new Error("Failed to execute code.");
@@ -173,7 +112,7 @@ async function execCode(userCode, input) {
 async function runTests() {
     console.log("runTests()");
     let updatedTests = [];
- v
+
     console.log("The test Cases:", testCases.value);
 
     testCases.value.forEach((test) => {
@@ -182,7 +121,7 @@ async function runTests() {
 
     console.log("Updated test cases with running status", testCases.value[0].status);
 
-    const finalCode = code.value + latihan.value.compileCode;
+    const finalCode = code.value + props.latihan.compileCode;
 
     for (let i = 0; i < testCases.value.length; i++) {
         let status;

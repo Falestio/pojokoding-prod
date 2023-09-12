@@ -2,9 +2,17 @@
 import prism from "markdown-it-prism";
 import markdownIt from "markdown-it";
 import markdownItAnchor from "markdown-it-anchor";
+import { htmlToToc } from "~/utils/content/htmlToToc";
+import { saveProgress } from "~~/utils/progress/saveProgress";
+import { useCurrentUser } from "~~/composables/user/useCurrentUser";
+import { getProgressOneCourse } from "@/utils/progress/getProgressOneCourse";
+import { runTests } from "@/utils/exercise/runTests";
+
 definePageMeta({
     layout: "empty",
 });
+
+const currentUser = useCurrentUser();
 
 // setup markdown renderer
 const md = new markdownIt({
@@ -14,51 +22,226 @@ const md = new markdownIt({
 md.use(markdownItAnchor);
 md.use(prism);
 
-// Get article
+// Get content
 const route = useRoute();
 const slug = route.params.article;
+
 const query = groq`*[_type == "content" && slug.current == "${slug}"][0]`;
-const { data: postData } = await useSanityQuery(query);
-const post = postData.value;
+const { data: contentData } = await useSanityQuery(query);
+const content = contentData.value;
+const postHtml = ref("");
+const toc = ref([]);
 
-// convert markdown to html
-const postHtml = md.render(post.markdown);
+if (content.contentType === "post") {
+    postHtml.value = md.render(content.markdown);
+    toc.value = htmlToToc(postHtml.value);
+    console.log(toc);
+}
 
+// Get all content related to the course
+const courseSlug = route.params.course;
+console.log(courseSlug);
+const sidebarContentQuery = groq`*[_type == "course" && slug.current == "${courseSlug}"]{
+  "content": *[_type == "content" && course._ref == ^._id]{_id, title, slug, orderRank} | order(orderRank asc)
+}`;
+const { data: sidebarContentData } = await useSanityQuery(sidebarContentQuery);
+const sidebarContent = sidebarContentData.value[0].content;
+
+// Get Users Progress in this course
+async function handleGetUsersProgress() {
+    console.log("handleGetUsersProgress: ", currentUser.value.uid);
+    const completedContents = await getProgressOneCourse(currentUser.value.uid, content.course._ref);
+    console.log("CompletedContents: ", completedContents);
+
+    const updatedSidebarContent = sidebarContent.forEach((item) => {
+        const match = completedContents.some((completedItem) => completedItem.contentId === item._id);
+        if (match) {
+            item.completed = true;
+        }
+    });
+
+    console.log("Updated Sidebar Content: ", updatedSidebarContent);
+
+    sidebarContent.value = updatedSidebarContent;
+}
+
+watch(currentUser.value, async (newValue, oldValue) => {
+    console.log("USER data updated");
+    await handleGetUsersProgress();
+});
+
+if (currentUser.value) {
+    console.log("User data is already here");
+    await handleGetUsersProgress();
+}
+
+// Save progres
+async function handleSaveProgress() {
+    await saveProgress(currentUser.value.uid, content._id, content.course._ref, content.contentType);
+}
+
+// ===================================== LATIHAN ==================================================
+const usersCode = ref(`let readline = require("readline")
+
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+});
+
+rl.on('line', function(line){
+    greet(line)
+})
+
+function greet(name){
+    console.log(\`Hallo \${name}\`)
+}`);
+
+const testCases = ref(content.testCases);
+
+const langId = content.lang
+
+async function handleCodeExecution() {
+    testCases.value = await runTests(usersCode.value, testCases.value, langId)
+    
+    const allSuccess = testCases.value.every((testCase) => testCase.status === "success");
+    if(allSuccess){
+        console.log("Semua Test Case Benar")
+        await saveProgress(currentUser.value.uid, content._id, content.course._ref, content.contentType, usersCode.value)
+    }
+}
 </script>
 
 <template>
     <div>
-        <Drawer>
-            <article class="article" v-html="postHtml"></article>
+        <Drawer :currentSidebarContent="sidebarContent">
+            <button @click="handleCodeExecution()">Exec Code</button>
+            <h1>Test Case</h1>
+            <pre>
+                {{ testCases }}
+            </pre>
+            <div class="w-[880px]">
+                <Comment :articleId="content._id"></Comment>
+                <pre>
+            <h1>Current User</h1>
+            {{ currentUser }}
+        </pre>
+                <pre>
+            <h2>Content</h2>
+            {{ content }}
+        </pre
+                >
+                <pre>
+            <h1>Sidebar Content with progress</h1>
+            {{ sidebarContent }}
+        </pre>
+                <pre>
+            <h1>Completed Contents</h1>
+        </pre>
+                <Ide v-if="content.contentType === 'exercise'" :latihan="content"></Ide>
+                <div v-if="content.contentType === 'post'">
+                    <button @click="handleSaveProgress()" class="p-3 bg-pink-600 text-white">Selesai</button>
+                    <pre>
+                {{ toc }}
+            </pre
+                    >
+                    <article class="article" v-html="postHtml"></article>
+                </div>
+            </div>
         </Drawer>
     </div>
 </template>
 
+
 <style>
-.article p,
-ol,
-ul {
-    font-size: 1.4rem;
-    line-height: 140%;
-}
-
-.article h1,
-h2,
-h3,
-h4,
-h5,
-h6,
-p {
-    line-height: normal;
-    margin: 1rem 0;
-}
-
+/* Style headings */
 .article h1 {
-    font-size: 3.3rem;
+    font-size: 28px;
+    font-weight: bold;
+    margin-top: 0;
 }
 
 .article h2 {
-    font-size: 2.2rem;
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.article h3 {
+    font-size: 20px;
+    font-weight: bold;
+}
+
+/* Style text elements */
+.article p {
+    font-size: 18px;
+    line-height: 1.6;
+    margin-bottom: 1em;
+}
+
+.article strong {
+    font-weight: bold;
+}
+
+.article em {
+    font-style: italic;
+}
+
+.article del {
+    text-decoration: line-through;
+}
+
+/* Style links */
+.article a {
+    color: #007bff;
+    text-decoration: none;
+}
+
+.article a:hover {
+    text-decoration: underline;
+}
+
+/* Style blockquotes */
+.article blockquote {
+    margin: 1em 0;
+    padding: 10px;
+    background-color: #e9e9e9;
+    border-left: 2px solid #ccc;
+}
+
+.article blockquote p {
+    margin: 0;
+}
+
+/* Style lists */
+.article ul,
+.article ol {
+    margin-bottom: 1em;
+    padding-left: 30px;
+}
+
+.article ul li,
+.article ol li {
+    margin-bottom: 0.5em;
+}
+
+/* Style tables */
+.article table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1em;
+}
+
+.article th,
+.article td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: left;
+}
+
+/* Style images */
+.article img {
+    max-width: 100%;
+    height: auto;
+    margin-bottom: 1em;
 }
 
 code[class*="language-"],

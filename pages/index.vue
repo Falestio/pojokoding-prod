@@ -1,6 +1,7 @@
 <script setup>
 const query = groq`*[_type == "course"]`;
 const { data: courses } = await useSanityQuery(query);
+console.log(courses.value)
 </script>
 
 <template>
@@ -45,6 +46,8 @@ const { data: courses } = await useSanityQuery(query);
         </section>
     </div>
 </template>
+
+ 
 
 <style>
 .contain {
